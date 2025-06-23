@@ -1,0 +1,6 @@
+0. Complete the Use case for REST API. agent configobject search.   - 
+1. Externalize the env siteminder credentials and URL. 
+2. dockerize
+3. reload cache method. 
+4. last updated time from audit log
+5. integrate with other MCP or RAG for knowledge base. 

@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+
+# SQLite/DB files
+*.db
+**/*.db
+
+# Log files
+*.log
+**/*.log
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+**/venv/
+**/.venv/
+**/env/
+**/ENV/
+
+# Editor directories and files
+.vscode/
+**/.vscode/
+
+# Environment variable files
+.env
+**/.env
+
+# Uvicorn PID files
+*.pid
+**/*.pid
