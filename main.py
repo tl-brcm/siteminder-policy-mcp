@@ -1,5 +1,8 @@
+"""Entry point to run the MCP server using stdio transport."""
+
 import logging
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from tooling import mcp
@@ -13,7 +16,7 @@ logging.basicConfig(
     ]
 )
 
-logging.debug("✅ Starting MCP Server (SSE mode)")
+logging.debug("✅ Starting MCP Server (stdio mode)")
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")

@@ -1,11 +1,23 @@
-from mcp.server.fastmcp import FastMCP
-from siteminder_api import get_token, fetch_objects, search_objects, get_object_details_from_href, get_object_by_id, build_object_id_url,show_detail_cache, clear_detail_cache
-from sm_registry import OBJECT_CLASSES
-from typing import Optional
-from sm_utils import extract_core_fields 
-import urllib.parse
-import logging
+"""Tool registration for interacting with SiteMinder via FastMCP."""
+
 import json
+import logging
+import urllib.parse
+from typing import Optional
+
+from mcp.server.fastmcp import FastMCP
+from siteminder_api import (
+    get_token,
+    fetch_objects,
+    search_objects,
+    get_object_details_from_href,
+    get_object_by_id,
+    build_object_id_url,
+    show_detail_cache,
+    clear_detail_cache,
+)
+from sm_registry import OBJECT_CLASSES
+from sm_utils import extract_core_fields
 
 mcp = FastMCP("siteminder-policy-assistant")
 
@@ -14,39 +26,52 @@ logger.setLevel(logging.DEBUG)
 
 # --- Helpers ---
 
-def ensure_dict(detail):
+def ensure_dict(detail: str | dict) -> dict:
+    """Return ``detail`` as a dictionary, parsing JSON strings when needed."""
+
     if isinstance(detail, str):
         try:
             detail = json.loads(detail)
-        except Exception:
-            raise ValueError("Argument must be a dict or a JSON string representing a dict")
+        except Exception as exc:
+            raise ValueError(
+                "Argument must be a dict or a JSON string representing a dict"
+            ) from exc
     return detail
 
 async def ensure_token() -> Optional[str]:
+    """Helper to fetch a token and log failures."""
+
     token = await get_token()
     if not token:
-        logger.error(" Failed to get session token.")
+        logger.error("Failed to get session token.")
         return None
     return token
 
 def normalize_name(obj: dict) -> dict:
+    """Attempt to derive a human readable name from an object's path."""
+
     if "path" in obj:
         try:
-            name = urllib.parse.unquote(obj["path"]).split("/")[-1].replace("+", " ")
+            name = (
+                urllib.parse.unquote(obj["path"]).split("/")[-1].replace("+", " ")
+            )
             obj["name"] = name
         except Exception:
             obj["name"] = "(unknown)"
     return obj
 
 def format_json_detail(detail: dict) -> str:
+    """Return the detail dictionary formatted as a fenced JSON block."""
+
     return "```json\n" + json.dumps(detail, indent=2) + "\n```"
 
-async def fetch_and_cache_details(hrefs: list, token: str, output: list):
-    for href in hrefs[:3]:  # Only top 3
+async def fetch_and_cache_details(hrefs: list[str], token: str, output: list[str]) -> None:
+    """Fetch details for the first few hrefs and append to ``output``."""
+
+    for href in hrefs[:3]:  # Only top 3 to keep responses concise
         try:
             detail = await get_object_details_from_href(href, token)
             if detail:
-                obj_id = detail.get("data", {}).get("id")
                 output.append("\n Detail:")
                 output.append(format_json_detail(detail))
         except Exception as e:
@@ -54,7 +79,9 @@ async def fetch_and_cache_details(hrefs: list, token: str, output: list):
 
 # --- Tool Registration ---
 
-def register_object_tools(obj_type: str):
+def register_object_tools(obj_type: str) -> None:
+    """Register list and search tools for a specific SiteMinder object type."""
+
     config = OBJECT_CLASSES[obj_type]
     formatter = config["formatter"]
     help_text = config["help"]
@@ -98,6 +125,8 @@ def register_object_tools(obj_type: str):
 
 @mcp.tool(name="get_object_by_id", description="Fetch a SiteMinder object by its ID and return full detail.")
 async def get_object_by_id_tool(id: str) -> str:
+    """Return the raw JSON for a SiteMinder object by id."""
+
     token = await ensure_token()
     if not token:
         return " Failed to get session token."
@@ -116,13 +145,13 @@ for obj_type in OBJECT_CLASSES:
     register_object_tools(obj_type)
 
 def register_object_link_tool(
-    mcp,
+    mcp: FastMCP,
     name: str,
     suffix: str = "",
     description: str = ""
-):
+) -> None:
     """
-    Registers a tool that fetches a SiteMinder object link endpoint based on object ID.
+    Register a tool that retrieves a specific link endpoint for an object.
     The tool accepts object ID or ObjectIDURL as input.
     """
     @mcp.tool(
@@ -203,9 +232,13 @@ register_object_link_tool(
 
 @mcp.tool(name="show_detail_cache", description="Show the keys of the SiteMinder object detail cache.")
 async def show_detail_cache_tool() -> str:
+    """Return the current keys stored in the detail cache."""
+
     return "DETAIL_CACHE keys:\n" + json.dumps(show_detail_cache(), indent=2)
 
 @mcp.tool(name="clear_detail_cache", description="Clear the SiteMinder object detail cache.")
 async def clear_detail_cache_tool() -> str:
+    """Remove all entries from the detail cache."""
+
     clear_detail_cache()
     return "DETAIL_CACHE cleared."
