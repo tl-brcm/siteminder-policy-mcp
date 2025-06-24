@@ -1,4 +1,4 @@
-# sm_registry.py
+"""Registry of SiteMinder object types and their metadata."""
 
 from sm_utils import default_formatter  
 
@@ -62,7 +62,7 @@ OBJECT_CLASSES = {
     },
 }
 
-# Set default formatter and help message for each object type
+# Attach a default formatter and help text to each object type entry.
 for name, obj in OBJECT_CLASSES.items():
     obj["formatter"] = default_formatter
     obj["help"] = (

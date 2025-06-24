@@ -1,6 +1,7 @@
-# dev.py
-from starlette.responses import Response
+"""Development ASGI application for running FastMCP over Server-Sent Events."""
+
 import logging
+from starlette.responses import Response
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,10 +22,15 @@ from tooling import mcp
 from mcp.server import Server
 
 # Create the actual ASGI app object
-mcp_server: Server = mcp._mcp_server  # private access is ok here
+# Access the underlying ``mcp.server.Server`` instance created by ``tooling``.
+mcp_server: Server = mcp._mcp_server  # type: ignore[attr-defined]
+
+# Transport used for streaming messages back to the client.
 sse = SseServerTransport("/messages/")
 
-async def handle_sse(request: Request):
+async def handle_sse(request: Request) -> Response:
+    """Handle the ``/sse`` endpoint to run the MCP server over SSE."""
+
     async with sse.connect_sse(request.scope, request.receive, request._send) as (reader, writer):
         await mcp_server.run(reader, writer, mcp_server.create_initialization_options())
             
