@@ -6,7 +6,7 @@ import urllib.parse
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from siteminder_api import (
+from sm_agent.api.siteminder_api import (
     get_token,
     fetch_objects,
     search_objects,
@@ -16,8 +16,8 @@ from siteminder_api import (
     show_detail_cache,
     clear_detail_cache,
 )
-from sm_registry import OBJECT_CLASSES
-from sm_utils import extract_core_fields
+from .sm_registry import OBJECT_CLASSES
+from .sm_utils import extract_core_fields
 
 mcp = FastMCP("siteminder-policy-assistant")
 

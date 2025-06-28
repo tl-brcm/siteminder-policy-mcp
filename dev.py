@@ -18,7 +18,7 @@ from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Route, Mount
-from tooling import mcp
+from sm_agent.tools.tooling import mcp
 from mcp.server import Server
 
 # Create the actual ASGI app object

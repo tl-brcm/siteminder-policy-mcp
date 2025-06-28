@@ -6,13 +6,13 @@ from typing import Any, Optional
 import httpx
 from cachetools import TTLCache
 
-from config import (
+from ..core.config import (
     SITE_MINDER_BASE_URL,
     SITE_MINDER_USERNAME,
     SITE_MINDER_PASSWORD,
 )
-from tls import create_insecure_httpx_client
-from cache_util import TimedCache
+from .tls import create_insecure_httpx_client
+from ..core.cache_util import TimedCache
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

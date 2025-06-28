@@ -1,6 +1,6 @@
 """Registry of SiteMinder object types and their metadata."""
 
-from sm_utils import default_formatter  
+from .sm_utils import default_formatter  
 
 OBJECT_CLASSES = {
     "SmRealm": {

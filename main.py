@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from tooling import mcp
+from sm_agent.tools.tooling import mcp
 
 logging.basicConfig(
     level=logging.DEBUG,

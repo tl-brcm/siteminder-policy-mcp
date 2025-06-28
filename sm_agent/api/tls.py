@@ -2,7 +2,7 @@
 
 import ssl
 import httpx
-from config import VERIFY_SSL
+from ..core.config import VERIFY_SSL
 
 def create_insecure_httpx_client() -> httpx.AsyncClient:
     """Return an ``AsyncClient`` that optionally disables SSL verification."""
