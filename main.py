@@ -1,11 +1,14 @@
-"""Entry point to run the MCP server using stdio transport."""
+"""Entry point to run the MCP server over standard I/O."""
 
+import asyncio
 import logging
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from mcp.server.stdio import stdio_server
 from sm_agent.tools.tooling import mcp
+from mcp.server import Server
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -16,7 +19,12 @@ logging.basicConfig(
     ]
 )
 
-logging.debug("✅ Starting MCP Server (stdio mode)")
+async def main() -> None:
+    """Run the MCP server over standard I/O."""
+    logging.info("🚀 Starting MCP Server (stdio mode)")
+    mcp_server: Server = mcp._mcp_server  # type: ignore[attr-defined]
+    async with stdio_server() as (reader, writer):
+        await mcp_server.run(reader, writer, mcp_server.create_initialization_options())
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    asyncio.run(main())

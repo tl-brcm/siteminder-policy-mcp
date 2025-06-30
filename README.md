@@ -97,6 +97,28 @@ This mode is for integrating the agent with other processes that communicate ove
 python main.py
 ```
 
+### C) Running with Docker
+
+You can also run the application inside a Docker container. This is the recommended approach for production or for a consistent, isolated environment.
+
+**1. Build the Docker Image**
+
+From the root of the project directory, run the following command to build the Docker image:
+
+```bash
+docker build -t siteminder-mcp .
+```
+
+**2. Run the Docker Container**
+
+Once the image is built, you can run it as a container. You'll need to pass in your environment variables. The easiest way is with an `.env` file.
+
+```bash
+docker run --env-file .env -it siteminder-mcp
+```
+
+This will start the server in standard I/O mode within the container.
+
 ## 🛠️ Available Tools
 
 Once running, the agent provides numerous tools to interact with SiteMinder, including:
