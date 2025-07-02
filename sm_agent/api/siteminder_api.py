@@ -9,7 +9,7 @@ from cachetools import TTLCache
 from ..core.config import (
     SITE_MINDER_BASE_URL,
     SITE_MINDER_USERNAME,
-    SITE_MINDER_PASSWORD,
+    get_siteminder_password,
 )
 from .tls import create_insecure_httpx_client
 from ..core.cache_util import TimedCache
@@ -46,7 +46,11 @@ async def get_token() -> Optional[str]:
         return cached_token
 
     logger.debug(f"Attempting login to SiteMinder at {LOGIN_URL}")
-    auth = httpx.BasicAuth(SITE_MINDER_USERNAME, SITE_MINDER_PASSWORD)
+    siteminder_password = get_siteminder_password()
+    if not siteminder_password:
+        logger.error("SiteMinder password is not available. Cannot retrieve token.")
+        return None
+    auth = httpx.BasicAuth(SITE_MINDER_USERNAME, siteminder_password)
     async with create_insecure_httpx_client() as client:
         try:
             resp = await client.post(LOGIN_URL, auth=auth, timeout=15.0)

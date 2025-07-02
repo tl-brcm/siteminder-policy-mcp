@@ -2,3 +2,4 @@ fastmcp
 python-dotenv
 cachetools
 sse-starlette
+hvac
