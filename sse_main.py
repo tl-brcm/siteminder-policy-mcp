@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 from starlette.routing import Route, Mount
 from mcp.server.sse import SseServerTransport
 from sm_agent.tools.tooling import mcp
@@ -34,11 +34,16 @@ async def handle_sse(request: Request) -> Response:
             
     return Response(status_code=204)
 
+async def health_check(request: Request) -> Response:
+    """Simple health check endpoint."""
+    return JSONResponse({"status": "ok"})
+
 app = Starlette(
     debug=True,
     routes=[
         Route("/sse", endpoint=handle_sse),
         Mount("/messages/", app=sse.handle_post_message),
+        Route("/health", endpoint=health_check),
     ],
 )
 
