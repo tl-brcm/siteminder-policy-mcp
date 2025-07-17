@@ -10,6 +10,9 @@ OBJECT_CLASSES = {
             "MaxTimeout", "SyncAudit", "ProcessAuthEvents", "ProcessAzEvents",
             "ResourceFilter", "MinUserConfidenceLevel", "SessionDrift"
         ],
+        "examples": [
+            "- ResourceFilter contains '/voonair'"
+        ]
     },
     "SmAuthScheme": {
         "description": "Defines an authentication scheme",
@@ -74,3 +77,5 @@ for name, obj in OBJECT_CLASSES.items():
         "- IsEnabled = true\n"
         "- Level > 500\n"
     )
+    if "examples" in obj:
+        obj["help"] += "\n" + "\n".join(obj["examples"])
