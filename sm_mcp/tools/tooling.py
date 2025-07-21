@@ -6,7 +6,7 @@ import urllib.parse
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from sm_agent.api.siteminder_api import (
+from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
     search_objects,

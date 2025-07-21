@@ -11,11 +11,11 @@ This project implements a Model Contextual Protocol (MCP) server for Broadcom Si
 
 ## 📂 Project Structure
 
-The project follows a standard Python package structure to ensure modularity and scalability. All core source code resides within the `sm_agent` directory.
+The project follows a standard Python package structure to ensure modularity and scalability. All core source code resides within the `sm_mcp` directory.
 
 ```
 /
-├── sm_agent/            # Main source package
+├── sm_mcp/            # Main source package
 │   ├── __init__.py
 │   ├── api/             # SiteMinder API client and helpers
 │   │   ├── siteminder_api.py
@@ -36,9 +36,9 @@ The project follows a standard Python package structure to ensure modularity and
 
 ### Module Overview
 
-- **`sm_agent/api`**: Handles all direct communication with the SiteMinder REST API, including authentication, session management, and data fetching.
-- **`sm_agent/core`**: Contains core application services. `config.py` loads settings from the environment, and `cache_util.py` provides caching utilities.
-- **`sm_agent/tools`**: Defines and registers all the tools available to the MCP agent. `tooling.py` is the central hub, `sm_registry.py` defines the available SiteMinder object types, and `sm_utils.py` provides formatting helpers.
+- **`sm_mcp/api`**: Handles all direct communication with the SiteMinder REST API, including authentication, session management, and data fetching.
+- **`sm_mcp/core`**: Contains core application services. `config.py` loads settings from the environment, and `cache_util.py` provides caching utilities.
+- **`sm_mcp/tools`**: Defines and registers all the tools available to the MCP agent. `tooling.py` is the central hub, `sm_registry.py` defines the available SiteMinder object types, and `sm_utils.py` provides formatting helpers.
 - **`main.py` / `dev.py`**: Entry points for running the server in different modes.
 
 ## 🚀 Getting Started
