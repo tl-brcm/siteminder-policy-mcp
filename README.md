@@ -25,7 +25,7 @@ The project follows a standard Python package structure to ensure modularity and
 │   │   └── cache_util.py
 │   └── tools/           # MCP tool definitions and registration
 │       ├── tooling.py
-│       ├── sm_registry.py
+│       ├── sm_registry.json
 │       └── sm_utils.py
 │
 ├── .env.example         # Example environment file
@@ -38,7 +38,7 @@ The project follows a standard Python package structure to ensure modularity and
 
 - **`sm_mcp/api`**: Handles all direct communication with the SiteMinder REST API, including authentication, session management, and data fetching.
 - **`sm_mcp/core`**: Contains core application services. `config.py` loads settings from the environment, and `cache_util.py` provides caching utilities.
-- **`sm_mcp/tools`**: Defines and registers all the tools available to the MCP agent. `tooling.py` is the central hub, `sm_registry.py` defines the available SiteMinder object types, and `sm_utils.py` provides formatting helpers.
+- **`sm_mcp/tools`**: Defines and registers all the tools available to the MCP agent. `tooling.py` is the central hub, `sm_registry.json` defines the available SiteMinder object types, and `sm_utils.py` provides formatting helpers.
 - **`main.py` / `dev.py`**: Entry points for running the server in different modes.
 
 ## 🚀 Getting Started

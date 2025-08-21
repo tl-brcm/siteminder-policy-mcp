@@ -16,8 +16,31 @@ from sm_mcp.api.siteminder_api import (
     show_detail_cache,
     clear_detail_cache,
 )
-from .sm_registry import OBJECT_CLASSES
-from .sm_utils import extract_core_fields
+import os
+from .sm_utils import default_formatter, extract_core_fields
+
+# Load object classes from JSON
+registry_path = os.path.join(os.path.dirname(__file__), 'sm_registry.json')
+with open(registry_path, 'r') as f:
+    OBJECT_CLASSES = json.load(f)
+
+# Attach a default formatter and help text to each object type entry.
+for name, obj in OBJECT_CLASSES.items():
+    obj["formatter"] = default_formatter
+    obj["help"] = (
+        f"Search SiteMinder {name} objects using a filter expression.\n\n"
+        f"Supported attributes:\n- " + "\n- ".join(obj["attributes"]) + "\n\n"
+        "Examples:\n"
+        "- Name contains 'login'\n"
+        "- Desc != null\n"
+        "- IsEnabled = true\n"
+        "- Level > 500\n"
+    )
+    if "examples" in obj:
+        obj["help"] += "\n" + "\n".join(obj["examples"])
+
+    if name == "SmAgentConfig":
+        obj["help"] += "\n\nExamples:\n- Name contains 'aco_test'\n- Desc contains 'test'"
 
 mcp = FastMCP("siteminder-policy-assistant")
 
@@ -63,7 +86,16 @@ def normalize_name(obj: dict) -> dict:
 def format_json_detail(detail: dict) -> str:
     """Return the detail dictionary formatted as a fenced JSON block."""
 
-    return "```json\n" + json.dumps(detail, indent=2) + "\n```"
+    # Recursively remove any dict entries where the value starts with #
+    def remove_unset_values(obj):
+        if isinstance(obj, dict):
+            return {k: remove_unset_values(v) for k, v in obj.items() if not (isinstance(v, str) and v.startswith("#"))}
+        elif isinstance(obj, list):
+            return [remove_unset_values(elem) for elem in obj]
+        else:
+            return obj
+
+    return "```json\n" + json.dumps(remove_unset_values(detail), indent=2) + "\n```"
 
 async def fetch_and_cache_details(hrefs: list[str], token: str, output: list[str]) -> None:
     """Fetch details for the first few hrefs and append to ``output``."""
@@ -85,6 +117,9 @@ def register_object_tools(obj_type: str) -> None:
     config = OBJECT_CLASSES[obj_type]
     formatter = config["formatter"]
     help_text = config["help"]
+
+    if obj_type == "SmAgentConfig":
+        help_text = help_text.replace("Agent Configuration Object", "Agent Configuration Object (ACO)")
 
     list_doc = f"Show a summary of all SiteMinder {obj_type} objects."
 
