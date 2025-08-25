@@ -1,5 +1,7 @@
 # SiteMinder Policy MCP Assistant
 
+> **Disclaimer:** This is a sample project and is not intended for production use. It is offered as-is as a starting point for the community.
+
 This project implements a Model Contextual Protocol (MCP) server for Broadcom SiteMinder. It allows AI assistants or other automation tools to interact with a SiteMinder policy environment by exposing a powerful, intuitive set of tools for querying and analyzing policy objects.
 
 ## ✨ Features
@@ -8,6 +10,7 @@ This project implements a Model Contextual Protocol (MCP) server for Broadcom Si
 - **Relationship Navigation:** Provides tools to explore object dependencies, such as finding all policies that use a specific realm (`get_usedby_of_object`) or viewing child objects (`get_children_of_object`).
 - **Intelligent Caching:** In-memory caching for API tokens and object details to improve performance and reduce load on the SiteMinder API.
 - **Flexible Deployment:** Can be run as a local development server with an SSE endpoint or as a stdio-based server for integration with other processes.
+- **Optimized Tool Helper Text:** The tool helper text is optimized to refer to "agent config" as "agent config object" or "aco", and the output of the `get_object_by_id` tool will now hide any parameters that start with "#".
 
 ## 📂 Project Structure
 
@@ -102,8 +105,8 @@ python main.py
 Once running, the agent provides numerous tools to interact with SiteMinder, including:
 
 - `list_<object_type>_summary`: Shows a summary of all objects of a given type (e.g., `list_SmDomain_summary`).
-- `search_<object_type>`: Searches for objects using a filter expression (e.g., `search_SmRealm(filter_expression="Name contains 'test'")`).
-- `get_object_by_id`: Fetches the full details of an object by its unique ID.
+- `search_<object_type>`: Searches for objects using a filter expression (e.g., `search_SmRealm(filter_expression="Name contains 'test'")`). The tool for `SmAgentConfig` objects also accepts `aco` as a valid name for the object.
+- `get_object_by_id`: Fetches the full details of an object by its unique ID. The output of this tool will hide any parameters that start with "#".
 - `get_children_of_object`: Lists all child objects of a given object.
 - `get_usedby_of_object`: Shows which other objects depend on or use a given object.
 - ...and several others for navigating object relationships and metadata.
