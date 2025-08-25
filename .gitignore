@@ -37,3 +37,6 @@ ENV/
 # Uvicorn PID files
 *.pid
 **/*.pid
+
+# Gemini files
+**/gemini.md
