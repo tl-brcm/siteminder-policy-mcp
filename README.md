@@ -80,25 +80,15 @@ VERIFY_SSL="true"
 
 ### 4. Running the Server
 
-You can run the server in two modes:
+**Standard I/O Mode (Primary)**
 
-**A) Development Mode (Recommended for testing)**
-
-This mode uses the `dev.py` script to launch an ASGI server with a Server-Sent Events (SSE) endpoint for communication.
-
-```bash
-# Make sure you are in the root of the project directory
-uvicorn dev:app --reload --port 3123 --host 0.0.0.0
-```
-The server will be available at `http://0.0.0.0:3123`.
-
-**B) Standard I/O Mode**
-
-This mode is for integrating the agent with other processes that communicate over `stdin` and `stdout`.
+This is the standard way to run the MCP server for integration with agents (like Claude Desktop or Gemini).
 
 ```bash
 python main.py
 ```
+
+**(Note: `dev.py` / SSE mode is currently undergoing migration to FastMCP 3.x and may not function as expected. Please use `main.py`.)**
 
 ## 🛠️ Available Tools
 
@@ -110,3 +100,9 @@ Once running, the agent provides numerous tools to interact with SiteMinder, inc
 - `get_children_of_object`: Lists all child objects of a given object.
 - `get_usedby_of_object`: Shows which other objects depend on or use a given object.
 - ...and several others for navigating object relationships and metadata.
+
+## 📚 Available Resources
+
+The server exposes SiteMinder objects as readable resources. This allows the agent to "read" an object directly.
+
+- `siteminder://objects/{obj_id}`: Read the full JSON detail of a SiteMinder object by its ID (e.g., `siteminder://objects/CA.SM::Domain@03-...`).

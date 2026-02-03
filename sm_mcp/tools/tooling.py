@@ -5,7 +5,7 @@ import logging
 import urllib.parse
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
@@ -123,8 +123,7 @@ def register_object_tools(obj_type: str) -> None:
 
     list_doc = f"Show a summary of all SiteMinder {obj_type} objects."
 
-    @mcp.tool(name=f"list_{obj_type.lower()}_summary", description=list_doc)
-    async def list_tool():
+    async def list_tool() -> str:
         token = await ensure_token()
         if not token:
             return " Failed to get session token."
@@ -138,25 +137,40 @@ def register_object_tools(obj_type: str) -> None:
             logger.exception("List operation failed")
             return f" Error fetching {obj_type} objects: {e}"
 
-    @mcp.tool(name=f"search_{obj_type.lower()}", description=help_text)
-    async def search_tool(filter_expression: str):
+    mcp.tool(
+        name=f"list_{obj_type.lower()}_summary",
+        description=list_doc
+    )(list_tool)
+
+    async def search_tool(filter_expression: str, ctx: Context) -> str:
         token = await ensure_token()
         if not token:
             return " Failed to get session token."
         try:
+            ctx.info(f"Searching {obj_type} with filter: {filter_expression}")
             raw_results = await search_objects(obj_type, token, filter_expression) or []
             if not raw_results:
                 return f"No {obj_type} objects matched this filter."
+            
+            ctx.info(f"Found {len(raw_results)} results. Fetching details...")
             results = [normalize_name(dict(r)) for r in raw_results]
 
             output = [formatter(r) for r in results]
             hrefs = [r.get("href") for r in results if r.get("href")]
+            
+            # Progress reporting could be granular here, but for now just logging
             await fetch_and_cache_details(hrefs, token, output)
+            
             logger.debug(f"output returned: {output}")
             return "\n\n".join(output)
         except Exception as e:
             logger.exception("Search operation failed")
             return f" Error fetching {obj_type} objects: {e}"
+
+    mcp.tool(
+        name=f"search_{obj_type.lower()}",
+        description=help_text
+    )(search_tool)
 
 @mcp.tool(name="get_object_by_id", description="Fetch a SiteMinder object by its ID and return full detail.")
 async def get_object_by_id_tool(id: str) -> str:
@@ -189,15 +203,7 @@ def register_object_link_tool(
     Register a tool that retrieves a specific link endpoint for an object.
     The tool accepts object ID or ObjectIDURL as input.
     """
-    @mcp.tool(
-        name=name,
-        description=(
-            f"{description}\n\n"
-            "Input: the object ID (e.g., 'CA.SM::Domain@03-...') **or** the full object detail URL.\n"
-            "Output: JSON response from the requested endpoint.\n"
-            "This tool will construct the proper URL automatically."
-        )
-    )
+    
     async def tool(id_or_url: str):
         token = await ensure_token()
         if not token:
@@ -232,6 +238,16 @@ def register_object_link_tool(
             return result
         except Exception as e:
             return {"error": f"Failed to fetch detail for url: {url}, error: {e}"}
+
+    mcp.tool(
+        name=name,
+        description=(
+            f"{description}\n\n"
+            "Input: the object ID (e.g., 'CA.SM::Domain@03-...') **or** the full object detail URL.\n"
+            "Output: JSON response from the requested endpoint.\n"
+            "This tool will construct the proper URL automatically."
+        )
+    )(tool)
 
 # Call this at startup to register all link tools
 register_object_link_tool(
@@ -277,3 +293,16 @@ async def clear_detail_cache_tool() -> str:
 
     clear_detail_cache()
     return "DETAIL_CACHE cleared."
+
+@mcp.resource("siteminder://objects/{obj_id}")
+async def get_object_resource(obj_id: str) -> str:
+    """Read a SiteMinder object's raw JSON by its ID.
+    
+    The obj_id should be the SiteMinder object identifier (e.g., CA.SM::Domain@...).
+    """
+    token = await ensure_token()
+    if not token:
+        raise RuntimeError("Failed to get session token")
+    
+    detail = await get_object_by_id(obj_id, token)
+    return json.dumps(detail, indent=2)
