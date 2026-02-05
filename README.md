@@ -88,7 +88,13 @@ This is the standard way to run the MCP server for integration with agents (like
 python main.py
 ```
 
-**(Note: `dev.py` / SSE mode is currently undergoing migration to FastMCP 3.x and may not function as expected. Please use `main.py`.)**
+**B) HTTP / Development Mode**
+
+This mode uses `dev.py` to run the server over HTTP (Streamable Transport).
+
+```bash
+uvicorn dev:app --reload --port 3123 --host 0.0.0.0
+```
 
 ## 🛠️ Available Tools
 
