@@ -6,7 +6,8 @@ import urllib.parse
 from typing import Optional
 
 from fastmcp import FastMCP, Context
-from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier, JWTVerifier
+from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
@@ -44,9 +45,39 @@ for name, obj in OBJECT_CLASSES.items():
         obj["help"] += "\n\nExamples:\n- Name contains 'aco_test'\n- Desc contains 'test'"
 
 # Configure authentication
-auth_token = os.getenv("MCP_AUTH_TOKEN")
+# Priority: IDSP (OIDC) > IDSP (JWT) > Local (Static Token) > None
 auth = None
-if auth_token:
+idsp_oidc_url = os.getenv("IDSP_OIDC_URL")
+idsp_jwks_uri = os.getenv("IDSP_JWKS_URI")
+auth_token = os.getenv("MCP_AUTH_TOKEN")
+
+if idsp_oidc_url:
+    # Use OIDCProxy for full OAuth/OIDC support
+    # This enables the MCP server to act as an OAuth Client to Broadcom IDSP
+    config_url = f"{idsp_oidc_url}/.well-known/openid-configuration"
+    # If the URL already ends with .well-known..., use it as is
+    if idsp_oidc_url.endswith("openid-configuration"):
+        config_url = idsp_oidc_url
+        
+    required_scopes = os.getenv("IDSP_SCOPES", "openid").split()
+    auth = OIDCProxy(
+        config_url=config_url,
+        client_id=os.getenv("IDSP_CLIENT_ID"),
+        client_secret=os.getenv("IDSP_CLIENT_SECRET"),
+        base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
+        required_scopes=required_scopes,
+        audience=os.getenv("IDSP_AUDIENCE"),
+    )
+    logging.getLogger(__name__).info("Configured IDSP OIDC Authentication")
+
+elif idsp_jwks_uri:
+    auth = JWTVerifier(
+        jwks_uri=idsp_jwks_uri,
+        issuer=os.getenv("IDSP_ISSUER"),
+        audience=os.getenv("IDSP_AUDIENCE")
+    )
+    logging.getLogger(__name__).info("Configured IDSP JWT Authentication")
+elif auth_token:
     auth = StaticTokenVerifier(
         tokens={
             auth_token: {
@@ -55,6 +86,7 @@ if auth_token:
             }
         }
     )
+    logging.getLogger(__name__).info("Configured Static Token Authentication")
 
 mcp = FastMCP(
     "siteminder-policy-assistant",
