@@ -6,6 +6,7 @@ import urllib.parse
 from typing import Optional
 
 from fastmcp import FastMCP, Context
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
@@ -42,7 +43,23 @@ for name, obj in OBJECT_CLASSES.items():
     if name == "SmAgentConfig":
         obj["help"] += "\n\nExamples:\n- Name contains 'aco_test'\n- Desc contains 'test'"
 
-mcp = FastMCP("siteminder-policy-assistant")
+# Configure authentication
+auth_token = os.getenv("MCP_AUTH_TOKEN")
+auth = None
+if auth_token:
+    auth = StaticTokenVerifier(
+        tokens={
+            auth_token: {
+                "client_id": "cursor-client",
+                "scopes": ["all"]
+            }
+        }
+    )
+
+mcp = FastMCP(
+    "siteminder-policy-assistant",
+    auth=auth
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
