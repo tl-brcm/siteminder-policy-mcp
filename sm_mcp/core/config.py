@@ -19,6 +19,9 @@ SITE_MINDER_PASSWORD = os.getenv("SITE_MINDER_PASSWORD")
 # ``false`` to disable SSL verification.
 VERIFY_SSL = os.getenv("VERIFY_SSL", "false").lower() == "true"
 
+# Logging Configuration
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 # OAuth Configuration for Broadcom IDSP
 IDSP_OIDC_URL = os.getenv("IDSP_OIDC_URL")
 IDSP_CLIENT_ID = os.getenv("IDSP_CLIENT_ID")

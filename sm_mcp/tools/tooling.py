@@ -8,6 +8,7 @@ from typing import Optional
 from fastmcp import FastMCP, Context
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier, JWTVerifier
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
+from key_value.aio.stores.memory.store import MemoryStore
 from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
@@ -59,7 +60,12 @@ if idsp_oidc_url:
     if idsp_oidc_url.endswith("openid-configuration"):
         config_url = idsp_oidc_url
         
+    logging.debug(f"Initializing OIDCProxy with Config URL: {config_url}")
+    logging.debug(f"Client ID: {os.getenv('IDSP_CLIENT_ID')}")
+    logging.debug(f"Base URL: {os.getenv('MCP_BASE_URL')}")
+    
     required_scopes = os.getenv("IDSP_SCOPES", "openid").split()
+    callback_path = "/callback"
     auth = OIDCProxy(
         config_url=config_url,
         client_id=os.getenv("IDSP_CLIENT_ID"),
@@ -67,8 +73,12 @@ if idsp_oidc_url:
         base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
         required_scopes=required_scopes,
         audience=os.getenv("IDSP_AUDIENCE"),
+        redirect_path=callback_path,
+        client_storage=MemoryStore()
     )
-    logging.getLogger(__name__).info("Configured IDSP OIDC Authentication")
+    full_callback = f"{os.getenv('MCP_BASE_URL', 'http://localhost:3123')}{callback_path}"
+    logging.getLogger(__name__).info(f"Configured IDSP OIDC Authentication. Callback URL: {full_callback}")
+    logging.debug(f"Required Scopes for Token Validation: {required_scopes}")
 
 elif idsp_jwks_uri:
     auth = JWTVerifier(
