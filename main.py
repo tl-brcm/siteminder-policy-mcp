@@ -25,33 +25,68 @@ logging.debug(f"Starting MCP Server (HTTP mode) with Log Level: {LOG_LEVEL}")
 
 @mcp.custom_route("/.well-known/mcp", methods=["GET"])
 @mcp.custom_route("/.well-known/oauth-protected-resource/mcp", methods=["GET"])
+@mcp.custom_route("/.well-known/oauth-protected-resource/sm-policy/mcp", methods=["GET"])
 async def discovery_endpoint(request):
     """
     Expose MCP discovery metadata. 
-    Values are driven strictly by environment variables for maximum configurability.
+    Points Cursor to THIS server for authentication (Proxy mode).
     """
     logging.debug(f"Discovery metadata requested via {request.url.path}")
-    auth_servers = [s.strip() for s in os.getenv("MCP_AUTHORIZATION_SERVERS", "").split(",") if s.strip()]
-    resource = os.getenv("MCP_RESOURCE_URL", "https://mcp.vm.demo:8443/sm-policy/mcp")
+    
+    # In Proxy mode, THIS server is the authorization server for Cursor
+    base_url = os.getenv("MCP_BASE_URL", "https://mcp.vm.demo:8443/sm-policy")
+    resource = os.getenv("MCP_RESOURCE_URL", f"{base_url}/mcp")
+    app_name = os.getenv("MCP_APP_NAME", "siteminder-policy-assistant")
     
     # Handle both space and comma separated scopes
     raw_scopes = os.getenv("MCP_SCOPES_SUPPORTED", "openid profile email siteminder:access")
     scopes = [s.strip() for s in raw_scopes.replace(",", " ").split() if s.strip()]
-    
-    app_name = os.getenv("MCP_APP_NAME", "siteminder-policy-assistant")
     
     metadata = {
         "name": app_name,
         "resource": resource,
         "resource_name": app_name,
         "bearer_methods_supported": ["header"],
-        "authorization_servers": auth_servers,
+        # Cursor needs to authenticate against the MCP Server's Proxy
+        "authorization_servers": [base_url],
+        "registration_endpoint": f"{base_url}/register",
         "scopes_supported": scopes
+    }
+    return JSONResponse(metadata)
+
+@mcp.custom_route("/.well-known/openid-configuration", methods=["GET"])
+async def openid_configuration(request):
+    """
+    Expose OpenID Connect discovery metadata by mirroring the OAuth metadata.
+    This is required for clients (like Cursor) that expect OIDC discovery.
+    """
+    base_url = os.getenv("MCP_BASE_URL", "https://mcp.vm.demo:8443/sm-policy")
+    
+    # Construct metadata manually since we can't easily access the internal proxy's config
+    # but we know what it should be based on our proxy setup.
+    metadata = {
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/authorize",
+        "token_endpoint": f"{base_url}/token",
+        "registration_endpoint": f"{base_url}/register",
+        "jwks_uri": f"{base_url}/.well-known/jwks.json", # FastMCP might not expose this easily, but let's see
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"], # Added none for public client
+        "scopes_supported": [s.strip() for s in os.getenv("MCP_SCOPES_SUPPORTED", "").replace(",", " ").split() if s.strip()],
+        "code_challenge_methods_supported": ["S256"]
     }
     return JSONResponse(metadata)
 
 # Create ASGI application
 app = mcp.http_app()
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    logging.debug(f"Incoming request: {request.method} {request.url.path}")
+    response = await call_next(request)
+    logging.debug(f"Response status: {response.status_code} for {request.method} {request.url.path}")
+    return response
 
 if __name__ == "__main__":
     import uvicorn

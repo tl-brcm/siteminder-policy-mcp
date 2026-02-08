@@ -39,3 +39,5 @@ ENV/
 **/*.pid
 
 nginx-portable/
+
+oauth_storage/
