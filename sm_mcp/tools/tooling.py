@@ -82,7 +82,7 @@ if idsp_oidc_url:
     auth = OIDCProxy(
         config_url=config_url,
         client_id=os.getenv("IDSP_CLIENT_ID"),
-        client_secret=os.getenv("IDSP_CLIENT_SECRET", "public-client-placeholder"),
+        client_secret="public-pkce-client", # Hardcoded because FastMCP requires a non-empty string
         base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
         required_scopes=validation_scopes,
         extra_authorize_params={"scope": " ".join(requested_scopes)}, # Explicitly ask for full scopes

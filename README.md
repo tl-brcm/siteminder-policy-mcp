@@ -2,113 +2,117 @@
 
 > **Disclaimer:** This is a sample project and is not intended for production use. It is offered as-is as a starting point for the community.
 
-This project implements a Model Contextual Protocol (MCP) server for Broadcom SiteMinder. It allows AI assistants or other automation tools to interact with a SiteMinder policy environment by exposing a powerful, intuitive set of tools for querying and analyzing policy objects.
+This project implements a Model Contextual Protocol (MCP) server for Broadcom SiteMinder using **FastMCP 3.0**. It allows AI assistants (like Cursor) to interact with a SiteMinder policy environment through a secure, OIDC-protected interface.
 
 ## ✨ Features
 
-- **Dynamic Tool Generation:** Automatically creates `list` and `search` tools for all registered SiteMinder object types (Domains, Realms, Policies, etc.).
-- **Relationship Navigation:** Provides tools to explore object dependencies, such as finding all policies that use a specific realm (`get_usedby_of_object`) or viewing child objects (`get_children_of_object`).
-- **Intelligent Caching:** In-memory caching for API tokens and object details to improve performance and reduce load on the SiteMinder API.
-- **Flexible Deployment:** Can be run as a local development server with an SSE endpoint or as a stdio-based server for integration with other processes.
-- **Optimized Tool Helper Text:** The tool helper text is optimized to refer to "agent config" as "agent config object" or "aco", and the output of the `get_object_by_id` tool will now hide any parameters that start with "#".
+- **OAuth 2.0 / OIDC Integration:** Built-in support for Broadcom Identity Security Platform (IDSP) acting as a Resource Server.
+- **Dynamic Tool Generation:** Automatically creates `list` and `search` tools for all registered SiteMinder object types.
+- **Secure Reverse Proxy:** Includes a portable Nginx configuration for local HTTPS support with custom hostnames.
+- **Persistent Sessions:** Client registrations and tokens are persisted locally in `oauth_storage`.
+- **Intelligent Caching:** Performance-optimized fetching with multi-level caching for SiteMinder objects.
 
 ## 📂 Project Structure
 
-The project follows a standard Python package structure to ensure modularity and scalability. All core source code resides within the `sm_mcp` directory.
-
 ```
 /
-├── sm_mcp/            # Main source package
-│   ├── __init__.py
-│   ├── api/             # SiteMinder API client and helpers
-│   │   ├── siteminder_api.py
-│   │   └── tls.py
-│   ├── core/            # Cross-cutting concerns (config, cache)
-│   │   ├── config.py
-│   │   └── cache_util.py
-│   └── tools/           # MCP tool definitions and registration
-│       ├── tooling.py
-│       ├── sm_registry.json
-│       └── sm_utils.py
-│
-├── .env.example         # Example environment file
-├── main.py              # Main entry point for stdio transport
-├── dev.py               # Entry point for development (ASGI/SSE)
+├── sm_mcp/              # Main source package
+│   ├── api/             # SiteMinder API client
+│   ├── core/            # Config & Logging
+│   └── tools/           # MCP Tooling & OIDC Logic
+├── nginx-scripts/       # Portable Nginx management
+├── oauth_storage/       # Persistent client registrations (local)
+├── cert.pem / key.pem   # Self-signed SSL certificates
+├── generate_cert.py     # SSL certificate generator
+├── main.py              # Server entry point (HTTP/SSE)
 └── requirements.txt     # Python dependencies
 ```
-
-### Module Overview
-
-- **`sm_mcp/api`**: Handles all direct communication with the SiteMinder REST API, including authentication, session management, and data fetching.
-- **`sm_mcp/core`**: Contains core application services. `config.py` loads settings from the environment, and `cache_util.py` provides caching utilities.
-- **`sm_mcp/tools`**: Defines and registers all the tools available to the MCP agent. `tooling.py` is the central hub, `sm_registry.json` defines the available SiteMinder object types, and `sm_utils.py` provides formatting helpers.
-- **`main.py` / `dev.py`**: Entry points for running the server in different modes.
 
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
 
 - Python 3.10+
-- Access to a Broadcom SiteMinder environment with the REST API enabled.
+- Access to a Broadcom SiteMinder REST API.
+- Broadcom IDSP account for OIDC authentication.
 
-### 2. Installation
+### 2. Local Hostname Setup
 
-Clone the repository and install the required dependencies.
+To use the custom development hostname, add the following to your `C:\Windows\System32\drivers\etc\hosts` file:
+```text
+127.0.0.1  mcp.vm.demo
+```
+
+### 3. Installation & SSL Setup
 
 ```bash
-git clone <repository-url>
-cd siteminder-mcp
+# Install dependencies
 pip install -r requirements.txt
+
+# Generate SSL certificates for mcp.vm.demo
+python generate_cert.py
+
+# Trust the certificate (Windows)
+Import-Certificate -FilePath "cert.pem" -CertStoreLocation Cert:\CurrentUser\Root
 ```
 
-### 3. Configuration
+### 4. Configuration
 
-The server is configured using environment variables. Create a `.env` file in the project root by copying the `.env.example` file (if one exists) or creating it from scratch.
+Create a `.env` file from the example:
 
-**`.env` file:**
+```ini
+# SiteMinder API
+SITE_MINDER_BASE_URL="https://ps8:8443"
+SITE_MINDER_USERNAME="siteminder"
+SITE_MINDER_PASSWORD="your_password"
+VERIFY_SSL="false"
+
+# OIDC Proxy Configuration (Broadcom IDSP)
+IDSP_OIDC_URL="https://ssp-215.demo-broadcom.com/default"
+IDSP_CLIENT_ID="your-idsp-app-client-id"
+IDSP_CLIENT_SECRET="your-idsp-app-secret"
+IDSP_AUDIENCE="https://mcp.vm.demo:8443/sm-policy/mcp"
+IDSP_SCOPES="openid phone profile offline_access groups siteminder:access email"
+
+# FastMCP Security
+MCP_BASE_URL="https://mcp.vm.demo:8443/sm-policy"
+JWT_SIGNING_KEY="generate-a-random-string-here"
+LOG_LEVEL="DEBUG"
 ```
-# SiteMinder API Endpoint
-SITE_MINDER_BASE_URL="https://your-siteminder-host.example.com"
 
-# SiteMinder API Credentials
-SITE_MINDER_USERNAME="your_api_user"
-SITE_MINDER_PASSWORD="your_api_password"
+### 5. Running the Server
 
-# Set to "false" to disable SSL certificate verification (for development/testing)
-VERIFY_SSL="true"
-```
+You need to run two components: the Python backend and the Nginx proxy.
 
-### 4. Running the Server
-
-**Standard I/O Mode (Primary)**
-
-This is the standard way to run the MCP server for integration with agents (like Claude Desktop or Gemini).
-
+**A) Start the Backend**
 ```bash
 python main.py
 ```
 
-**B) HTTP / Development Mode**
-
-This mode uses `dev.py` to run the server over HTTP (Streamable Transport).
-
-```bash
-uvicorn dev:app --reload --port 3123 --host 0.0.0.0
+**B) Start Nginx Proxy**
+```powershell
+cd nginx-scripts
+.\run_nginx.ps1
 ```
+
+## 🤖 Cursor Configuration
+
+Add the server to Cursor under **Settings -> MCP**:
+
+- **Name:** SiteMinder Policy
+- **Type:** `SSE`
+- **URL:** `https://mcp.vm.demo:8443/sm-policy/mcp`
+
+Upon connection, Cursor will detect the security requirement and prompt you to sign in via your browser through Broadcom IDSP.
 
 ## 🛠️ Available Tools
 
-Once running, the agent provides numerous tools to interact with SiteMinder, including:
+- `list_<object_type>_summary`: Summary of all objects (Domains, Realms, etc.).
+- `search_<object_type>`: Search using filter expressions (e.g., `Name contains 'login'`).
+- `get_object_by_id`: Full JSON detail for a specific ID.
+- `get_children_of_object`: Explore child relationships.
+- `get_usedby_of_object`: Identify dependencies.
 
-- `list_<object_type>_summary`: Shows a summary of all objects of a given type (e.g., `list_SmDomain_summary`).
-- `search_<object_type>`: Searches for objects using a filter expression (e.g., `search_SmRealm(filter_expression="Name contains 'test'")`). The tool for `SmAgentConfig` objects also accepts `aco` as a valid name for the object.
-- `get_object_by_id`: Fetches the full details of an object by its unique ID. The output of this tool will hide any parameters that start with "#".
-- `get_children_of_object`: Lists all child objects of a given object.
-- `get_usedby_of_object`: Shows which other objects depend on or use a given object.
-- ...and several others for navigating object relationships and metadata.
+## 🔒 Security Note
 
-## 📚 Available Resources
-
-The server exposes SiteMinder objects as readable resources. This allows the agent to "read" an object directly.
-
-- `siteminder://objects/{obj_id}`: Read the full JSON detail of a SiteMinder object by its ID (e.g., `siteminder://objects/CA.SM::Domain@03-...`).
+This server implements the **OIDC Proxy** pattern. It handles Dynamic Client Registration (DCR) locally for the LLM client and proxies the authentication to your upstream Broadcom IDSP. This ensures your SiteMinder environment remains protected by enterprise-grade identity management while providing a seamless experience for the AI assistant.
