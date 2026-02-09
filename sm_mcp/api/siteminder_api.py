@@ -93,6 +93,31 @@ async def http_get_with_token_refresh(
                 if attempt == retries:
                     return None
 
+async def http_post_with_token_refresh(
+    url: str, data: dict, token: Optional[str] = None, retries: int = 1
+) -> Any:
+    """POST ``data`` to ``url`` using the provided token and retry on 401 responses."""
+
+    if not token:
+        token = await get_token()
+
+    headers = get_headers(token)
+    async with create_insecure_httpx_client() as client:
+        for attempt in range(retries + 1):
+            try:
+                resp = await client.post(url, headers=headers, json=data, timeout=30.0)
+                if resp.status_code == 401 and attempt < retries:
+                    logger.warning("Token expired. Refreshing...")
+                    token = await get_token()
+                    headers = get_headers(token)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except Exception:
+                logger.exception(f"HTTP POST failed for {url}")
+                if attempt == retries:
+                    return None
+
 async def fetch_objects(class_name: str, token: Optional[str] = None) -> list[dict[str, Any]]:
     """Return a list of objects for the given class."""
 
@@ -100,6 +125,14 @@ async def fetch_objects(class_name: str, token: Optional[str] = None) -> list[di
     logger.debug(f"[FETCH] {class_name}: {url}")
     resp_json = await http_get_with_token_refresh(url, token, retries=1)
     return resp_json.get("data", []) if resp_json else []
+
+async def create_object(class_name: str, data: dict, token: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """Create a new object of the given class."""
+
+    url = f"{get_siteminder_base_url()}/ca/api/sso/services/policy/v1/{class_name}"
+    logger.debug(f"[CREATE] {class_name}: {url} with data: {data}")
+    resp_json = await http_post_with_token_refresh(url, data, token, retries=1)
+    return resp_json
 
 async def search_objects(
     class_name: str, token: Optional[str] = None, filter_expr: str = ""

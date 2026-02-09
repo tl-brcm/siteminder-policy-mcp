@@ -6,6 +6,7 @@ import urllib.parse
 from typing import Optional
 
 from fastmcp import FastMCP, Context
+from fastmcp.server.auth import require_scopes
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier, JWTVerifier
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from key_value.aio.stores.disk.store import DiskStore
@@ -18,6 +19,7 @@ from sm_mcp.api.siteminder_api import (
     build_object_id_url,
     show_detail_cache,
     clear_detail_cache,
+    create_object,
 )
 import os
 from .sm_utils import default_formatter, extract_core_fields
@@ -265,6 +267,46 @@ async def get_object_by_id_tool(id: str) -> str:
     except Exception as e:
         logger.exception("Error retrieving object by ID")
         return f" Error retrieving object with ID {id}: {e}"
+
+@mcp.tool(
+    name="create_sm_agent", 
+    description="Create a new SiteMinder Web Agent.",
+    auth=require_scopes("siteminder:write")
+)
+async def create_sm_agent_tool(
+    name: str,
+    agent_type_href: str,
+    description: str = "",
+    realm_hint_attr_id: int = 0
+) -> str:
+    """Create a new SmAgent object.
+    
+    Args:
+        name: Unique name for the agent.
+        agent_type_href: The full href link to the AgentType (e.g., .../SmAgentTypes/Web+Agent).
+        description: Optional description of the agent.
+        realm_hint_attr_id: RADIUS attribute ID (default 0 for standard web agents).
+    """
+    token = await ensure_token()
+    if not token:
+        return " Failed to get session token."
+    
+    payload = {
+        "Name": name,
+        "Desc": description,
+        "AgentTypeLink": {"href": agent_type_href},
+        "RealmHintAttrId": realm_hint_attr_id
+    }
+    
+    try:
+        result = await create_object("SmAgents", payload, token)
+        if result and "data" in result:
+            return f" Successfully created Web Agent: {name}\n\n" + format_json_detail(result["data"])
+        else:
+            return f" Failed to create Web Agent. API Response: {json.dumps(result)}"
+    except Exception as e:
+        logger.exception("Create agent operation failed")
+        return f" Error creating Web Agent: {e}"
 
 # Register tools for all object types
 for obj_type in OBJECT_CLASSES:

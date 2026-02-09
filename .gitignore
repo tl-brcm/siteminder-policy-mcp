@@ -41,3 +41,5 @@ ENV/
 nginx-portable/
 
 oauth_storage/
+
+mcp.log
