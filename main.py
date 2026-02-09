@@ -1,27 +1,29 @@
 import warnings
 import logging
-from dotenv import load_dotenv
+from pathlib import Path
 import os
 from starlette.responses import JSONResponse
 
 # Suppress noisy deprecation warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-load_dotenv()
-
-from sm_mcp.tools.tooling import mcp
 from sm_mcp.core.config import LOG_LEVEL
+
+# The config module handles .env loading automatically on import
+from sm_mcp.tools.tooling import mcp
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     handlers=[
-        logging.FileHandler("mcp.log", mode="w", encoding="utf-8"),
+        logging.FileHandler("mcp.log", mode="a", encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
 
-logging.debug(f"Starting MCP Server (HTTP mode) with Log Level: {LOG_LEVEL}")
+logging.info("--- MCP Server Starting ---")
+logging.info(f"CWD: {os.getcwd()}")
+logging.info(f"SITE_MINDER_BASE_URL: {os.getenv('SITE_MINDER_BASE_URL')}")
 
 @mcp.custom_route("/.well-known/mcp", methods=["GET"])
 @mcp.custom_route("/.well-known/oauth-protected-resource/mcp", methods=["GET"])
@@ -54,6 +56,7 @@ async def discovery_endpoint(request):
     }
     return JSONResponse(metadata)
 
+@mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
 @mcp.custom_route("/.well-known/openid-configuration", methods=["GET"])
 async def openid_configuration(request):
     """
@@ -74,6 +77,8 @@ async def openid_configuration(request):
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"], # Added none for public client
         "scopes_supported": [s.strip() for s in os.getenv("MCP_SCOPES_SUPPORTED", "").replace(",", " ").split() if s.strip()],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256", "HS256"],
         "code_challenge_methods_supported": ["S256"]
     }
     return JSONResponse(metadata)
