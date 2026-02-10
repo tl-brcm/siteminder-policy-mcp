@@ -21,8 +21,11 @@ TOKEN_CACHE = TimedCache(ttl_seconds=900)
 OBJECT_CACHE: dict[str, dict] = {}
 
 def get_siteminder_base_url() -> str:
-    """Return the base URL for the SiteMinder REST API."""
-    return config.SITE_MINDER_BASE_URL
+    """Return the base URL for the SiteMinder REST API, ensuring no trailing slash."""
+    base_url = config.SITE_MINDER_BASE_URL
+    if base_url:
+        return base_url.rstrip("/")
+    return ""
 
 def get_login_url() -> str:
     """Return the login URL for the SiteMinder REST API."""

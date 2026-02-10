@@ -9,17 +9,30 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from sm_mcp.core.config import LOG_LEVEL
 
-# The config module handles .env loading automatically on import
-from sm_mcp.tools.tooling import mcp
+# Configure logging
+log_level = getattr(logging, LOG_LEVEL, logging.INFO)
+log_format = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-    handlers=[
-        logging.FileHandler("mcp.log", mode="a", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
+# File handler
+file_handler = logging.FileHandler("mcp.log", mode="a", encoding="utf-8")
+file_handler.setFormatter(log_format)
+
+# Stream handler (Console)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(log_format)
+
+# Root logger: set to INFO by default to silence noisy libs (httpcore, etc.)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(stream_handler)
+
+# Application loggers: set to the user-defined LOG_LEVEL
+for logger_name in ["sm_mcp", "main", "fastmcp"]:
+    l = logging.getLogger(logger_name)
+    l.setLevel(log_level)
+
+from sm_mcp.tools.tooling import mcp
 
 logging.info("--- MCP Server Starting ---")
 logging.info(f"CWD: {os.getcwd()}")

@@ -210,8 +210,14 @@ def register_object_tools(obj_type: str) -> None:
             results = await fetch_objects(obj_type, token)
             if not results:
                 return f"No {obj_type} objects found."
-            normalized = [normalize_name(dict(r)) for r in results]
-            return "\n\n".join(formatter(o) for o in normalized)
+            
+            # SiteMinder 12.9 may return strings instead of dicts. 
+            # We normalize them into dicts before formatting.
+            processed = [
+                normalize_name(r if isinstance(r, dict) else {"name": str(r), "path": str(r)})
+                for r in results
+            ]
+            return "\n\n".join(formatter(o) for o in processed)
         except Exception as e:
             logger.exception("List operation failed")
             return f" Error fetching {obj_type} objects: {e}"
@@ -232,10 +238,14 @@ def register_object_tools(obj_type: str) -> None:
                 return f"No {obj_type} objects matched this filter."
             
             ctx.info(f"Found {len(raw_results)} results. Fetching details...")
-            results = [normalize_name(dict(r)) for r in raw_results]
+            
+            processed = [
+                normalize_name(r if isinstance(r, dict) else {"name": str(r), "path": str(r)})
+                for r in raw_results
+            ]
 
-            output = [formatter(r) for r in results]
-            hrefs = [r.get("href") for r in results if r.get("href")]
+            output = [formatter(r) for r in processed]
+            hrefs = [r.get("href") for r in processed if r.get("href")]
             
             # Progress reporting could be granular here, but for now just logging
             await fetch_and_cache_details(hrefs, token, output)
