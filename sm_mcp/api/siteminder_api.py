@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Any, Optional
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from cachetools import TTLCache
@@ -36,6 +37,27 @@ def build_object_id_url(obj_id: str) -> str:
     """Construct the detail URL for a given object id."""
     base = get_siteminder_base_url()
     return f"{base}/ca/api/sso/services/policy/v1/objects/{obj_id}"
+
+def normalize_url(url: str) -> str:
+    """Ensure the URL uses the configured base URL's scheme and netloc."""
+    base_url = get_siteminder_base_url()
+    if not base_url or not url.startswith("http"):
+        return url
+
+    base_parsed = urlparse(base_url)
+    url_parsed = urlparse(url)
+
+    # SiteMinder sometimes returns hrefs with internal ports (e.g. :8443)
+    # that may not be accessible. We normalize to the configured base URL.
+    if "/ca/api/sso/" in url_parsed.path:
+        normalized = urlunparse(url_parsed._replace(
+            scheme=base_parsed.scheme,
+            netloc=base_parsed.netloc
+        ))
+        if normalized != url:
+            logger.debug(f"Normalized URL from {url} to {normalized}")
+        return normalized
+    return url
 
 async def get_token() -> Optional[str]:
     """Retrieve and cache a SiteMinder session token."""
@@ -74,6 +96,7 @@ async def http_get_with_token_refresh(
     url: str, token: Optional[str] = None, retries: int = 1
 ) -> Any:
     """GET ``url`` using the provided token and retry on 401 responses."""
+    url = normalize_url(url)
     if not token:
         token = await get_token()
 
@@ -98,6 +121,7 @@ async def http_post_with_token_refresh(
     url: str, data: dict, token: Optional[str] = None, retries: int = 1
 ) -> Any:
     """POST ``data`` to ``url`` using the provided token and retry on 401 responses."""
+    url = normalize_url(url)
     if not token:
         token = await get_token()
 

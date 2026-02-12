@@ -232,12 +232,12 @@ def register_object_tools(obj_type: str) -> None:
         if not token:
             return " Failed to get session token."
         try:
-            ctx.info(f"Searching {obj_type} with filter: {filter_expression}")
+            await ctx.info(f"Searching {obj_type} with filter: {filter_expression}")
             raw_results = await search_objects(obj_type, token, filter_expression) or []
             if not raw_results:
                 return f"No {obj_type} objects matched this filter."
             
-            ctx.info(f"Found {len(raw_results)} results. Fetching details...")
+            await ctx.info(f"Found {len(raw_results)} results. Fetching details...")
             
             processed = [
                 normalize_name(r if isinstance(r, dict) else {"name": str(r), "path": str(r)})
