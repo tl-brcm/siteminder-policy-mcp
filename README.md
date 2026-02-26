@@ -113,6 +113,28 @@ Upon connection, Cursor will detect the security requirement and prompt you to s
 - `get_children_of_object`: Explore child relationships.
 - `get_usedby_of_object`: Identify dependencies.
 
+## 🧠 Agent Skills (Experimental)
+
+This server provides **Agent Skills** to help LLMs navigate complex SiteMinder workflows more effectively.
+
+### 1. What are Agent Skills?
+Agent Skills are structured instructions (`SKILL.md`) and technical references (`REFERENCE.md`) that provide "procedural memory" to the AI. They define specific workflows for:
+- Mapping Realms to Domains.
+- Inspecting ACO/HCO attributes.
+- Performing safety checks before modifications.
+
+### 2. How to Synchronize Skills
+Clients can verify and update their local skill files using the following tools:
+
+- **Check Version:** Call `get_skill_info` to see the latest version and hash of the server-side skill.
+- **Download Package:** Call `get_skill_sync_package` to retrieve the full content of `SKILL.md` and `REFERENCE.md`.
+
+### 3. Client Installation (Manual)
+To install the skill in your local environment (e.g., for Gemini CLI or Cursor):
+1. Call `get_skill_sync_package`.
+2. Create a folder named `siteminder-policy` in your local agent skills directory.
+3. Save the `SKILL.md` and `REFERENCE.md` content into that folder.
+
 ## 🔒 Security Note
 
 This server implements the **OIDC Proxy** pattern. It handles Dynamic Client Registration (DCR) locally for the LLM client and proxies the authentication to your upstream Broadcom IDSP. This ensures your SiteMinder environment remains protected by enterprise-grade identity management while providing a seamless experience for the AI assistant.

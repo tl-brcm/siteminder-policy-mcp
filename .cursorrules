@@ -1,0 +1,11 @@
+# SiteMinder Policy Project Rules
+
+## Agent Skill Bootstrapping
+- On your first turn in a session, or if I mention "sync", call `get_skill_info`.
+- Compare the returned `hash` and `version` with the content of `.claude/skills/siteminder-policy/SKILL.md`.
+- If different or missing, call `get_skill_sync_package` and update the files in `.claude/skills/siteminder-policy/`.
+- **CRITICAL:** Once the skill is loaded, always use the "Trace" and "Navigation" patterns defined in the skill for any SiteMinder administrative questions.
+
+## Development Standards
+- All SiteMinder tool calls must use single quotes for string literals in `filter_expression` (e.g., `'MyAgent'`).
+- Always check `get_usedby_of_object` before proposing any changes to the policy store.

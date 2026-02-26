@@ -410,6 +410,37 @@ register_object_link_tool(
     description="Fetches the edit information for the given SiteMinder object ID."
 )
 
+@mcp.tool(name="get_parent_of_object", description="Fetches the full detail of the parent object for the given SiteMinder object ID.")
+async def get_parent_of_object_tool(id: str) -> str:
+    """Retrieves the parent object by first fetching the child and then following the 'parent' link."""
+    token = await ensure_token()
+    if not token:
+        return " Failed to get session token."
+    
+    try:
+        # 1. Fetch the child object to find the parent link
+        child_detail = await get_object_by_id(id, token)
+        if not child_detail:
+            return f" Could not find object with ID: {id}"
+        
+        # The parent info is at the root of the response, not in 'data'
+        parent_info = child_detail.get("parent")
+        if not parent_info or not parent_info.get("id"):
+            return f" Object {id} has no parent (it may be a top-level object)."
+        
+        parent_id = parent_info["id"]
+        
+        # 2. Fetch the actual parent detail
+        parent_detail = await get_object_by_id(parent_id, token)
+        if parent_detail:
+            return f"Parent Object Detail ({parent_id}):\n" + format_json_detail(parent_detail)
+        else:
+            return f" Found parent ID {parent_id} but failed to fetch its details."
+            
+    except Exception as e:
+        logger.exception("Error retrieving parent object")
+        return f" Error retrieving parent for {id}: {e}"
+
 @mcp.tool(name="show_detail_cache", description="Show the keys of the SiteMinder object detail cache.")
 async def show_detail_cache_tool() -> str:
     """Return the current keys stored in the detail cache."""
@@ -435,3 +466,92 @@ async def get_object_resource(obj_id: str) -> str:
     
     detail = await get_object_by_id(obj_id, token)
     return json.dumps(detail, indent=2)
+
+@mcp.resource("siteminder://skills/sm-policy-management/SKILL.md")
+async def get_skill_main_resource() -> str:
+    """Read the main SKILL.md file for the SiteMinder Agent Skill."""
+    with open("SKILL.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.resource("siteminder://skills/sm-policy-management/REFERENCE.md")
+async def get_skill_reference_resource() -> str:
+    """Read the REFERENCE.md file for the SiteMinder Agent Skill."""
+    with open("REFERENCE.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.resource("siteminder://skills/sm-policy-management/ACO_REFERENCE.md")
+async def get_skill_aco_reference_resource() -> str:
+    """Read the ACO_REFERENCE.md file for the SiteMinder Agent Skill."""
+    with open("ACO_REFERENCE.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.tool(name="get_skill_info", description="Returns the latest version and metadata for the SiteMinder Agent Skill.")
+async def get_skill_info_tool() -> dict:
+    """Provides version and hash info for the skill files."""
+    import hashlib
+    try:
+        with open("SKILL.md", "r", encoding="utf-8") as f:
+            content = f.read()
+            # Simple version extraction from YAML
+            version = "unknown"
+            for line in content.split("\n"):
+                if line.startswith("version:"):
+                    version = line.split(":")[1].strip()
+                    break
+            file_hash = hashlib.md5(content.encode()).hexdigest()
+            
+        return {
+            "name": "siteminder-policy-management",
+            "version": version,
+            "hash": file_hash,
+            "last_updated": "2026-02-25"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool(name="get_skill_sync_package", description="Returns the latest Agent Skill files and instructions on where the client should save them locally.")
+async def get_skill_sync_package_tool() -> dict:
+    """Provides the SKILL.md, REFERENCE.md, and ACO_REFERENCE.md content for local installation."""
+    try:
+        with open("SKILL.md", "r", encoding="utf-8") as f:
+            skill_md = f.read()
+        with open("REFERENCE.md", "r", encoding="utf-8") as f:
+            ref_md = f.read()
+        with open("ACO_REFERENCE.md", "r", encoding="utf-8") as f:
+            aco_md = f.read()
+        
+        return {
+            "status": "success",
+            "instructions": "Please save these files into your local agent skills directory (e.g., .cursor/skills/siteminder-policy/ or similar).",
+            "files": {
+                "SKILL.md": skill_md,
+                "REFERENCE.md": ref_md,
+                "ACO_REFERENCE.md": aco_md
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@mcp.tool(name="lookup_aco_parameter", description="Search the full dictionary of SiteMinder ACO parameters for specific names or keywords.")
+async def lookup_aco_parameter_tool(query: str) -> str:
+    """Searches the local aco_parameters.json database for the given query."""
+    import json
+    import os
+    
+    json_path = os.path.join(os.path.dirname(__file__), 'aco_parameters.json')
+    try:
+        with open(json_path, 'r') as f:
+            params = json.load(f)
+            
+        matches = [p for p in params if query.lower() in p['name'].lower() or query.lower() in p['description'].lower()]
+        
+        if not matches:
+            return f"No parameters found matching '{query}'."
+            
+        output = []
+        for p in matches:
+            output.append(f"### {p['name']}\n- **Default:** {p['default']}\n- **Description:** {p['description']}")
+            
+        return "\n\n".join(output)
+    except Exception as e:
+        return f"Error reading parameter database: {e}"
