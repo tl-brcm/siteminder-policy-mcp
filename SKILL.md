@@ -1,16 +1,42 @@
 ---
 name: siteminder-policy-management
 description: Manages Broadcom SiteMinder policy objects, performs impact analysis, and navigates object hierarchies using the SiteMinder MCP server.
-version: 1.2.0
+version: 1.3.0
 ---
 
 # SiteMinder Policy Management
 
 This skill provides expert procedures for administering SiteMinder policy stores. It emphasizes safety through dependency checking and precision through structured navigation.
 
+## 🏛️ SiteMinder Object Relationship Model
+
+This is the conceptual map of how SiteMinder objects relate to each other. Use this to trace the path from user to resource.
+
+1.  **Domain:** The top-level application container.
+    - Contains: Realms, Policies, User Directories, Responses, Variables.
+
+2.  **Realm:** Defines a protected resource path (`ResourceFilter`).
+    - Associated with: an Authentication Scheme.
+    - Associated with: an Agent or Agent Group.
+    - Contains: one or more Rules.
+
+3.  **Agent:** Represents a client (e.g., a web server).
+    - Associated with: an Agent Configuration Object (ACO). The `AgentName` in the ACO maps a hostname to a SiteMinder Agent object.
+    - Can be a member of: an Agent Group.
+    - The combination of **Agent + ResourceFilter** is how SiteMinder identifies a request's Realm.
+
+4.  **Rule:** Defines an action for a resource (e.g., Allow/Deny, OnAuthAccept).
+    - Associated with: Responses (within a Policy).
+
+5.  **Policy:** The final enforcement point that connects users to resources.
+    - Connects: A User Directory/Group...
+    - With: ...a set of Rules...
+    - And adds: ...Responses to those rules.
+    - **CRITICAL:** A user has no access, even if a Rule allows it, until a Policy explicitly grants it to their group.
+
 ## 📚 Specialized Knowledge Resources
 - **Common ACO Params:** See `ACO_REFERENCE.md` for the most critical parameters and their security impacts.
-- **Full ACO Dictionary:** Use the `lookup_aco_parameter` tool to search the complete list of 100+ parameters for specific or obscure settings.
+- **Full ACO Dictionary:** Use the `lookup_aco_parameter` tool to search the complete list of 150+ parameters for specific or obscure settings.
 - **Technical Reference:** See `REFERENCE.md` for object attributes and filter syntax.
 
 ## 📋 Core Workflows
