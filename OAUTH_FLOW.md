@@ -19,16 +19,16 @@ graph TB
 
         subgraph "FastMCP Server (Port 3123)"
             direction TB
-            Discovery[/.well-known/mcp]
+            Discovery["/.well-known/mcp"]
             OIDC[OIDC Proxy Module]
             Tools[SiteMinder Tools]
-            Storage[(oauth_storage / DiskStore)]
+            Storage[("(oauth_storage / DiskStore)")]
         end
     end
 
     subgraph "External Systems"
-        IDSP[Broadcom IDSP<br/>Authorization Server]
-        SM_API[SiteMinder REST API<br/>Policy Store]
+        IDSP["Broadcom IDSP<br/>Authorization Server"]
+        SM_API["SiteMinder REST API<br/>Policy Store"]
     end
 
     %% Interactions
