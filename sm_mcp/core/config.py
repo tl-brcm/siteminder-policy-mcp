@@ -24,6 +24,7 @@ VERIFY_SSL = os.getenv("VERIFY_SSL", "false").lower() == "true"
 # Logging & MCP Metadata
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 MCP_BASE_URL = os.getenv("MCP_BASE_URL", "https://mcp.vm.demo:8443/sm-policy")
+MCP_AUTH_DISABLED = os.getenv("MCP_AUTH_DISABLED", "false").lower() == "true"
 
 # IDSP OIDC Configuration
 IDSP_OIDC_URL = os.getenv("IDSP_OIDC_URL")

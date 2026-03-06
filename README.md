@@ -76,6 +76,7 @@ IDSP_SCOPES="openid phone profile offline_access groups siteminder:access email"
 
 # FastMCP Security
 MCP_BASE_URL="https://mcp.vm.demo:8443/sm-policy"
+MCP_AUTH_DISABLED="false" # Set to "true" to disable OIDC protection (development only)
 JWT_SIGNING_KEY="generate-a-random-string-here"
 LOG_LEVEL="DEBUG"
 ```

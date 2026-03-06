@@ -21,6 +21,7 @@ from sm_mcp.api.siteminder_api import (
     clear_detail_cache,
     create_object,
 )
+from sm_mcp.core.config import MCP_AUTH_DISABLED
 import os
 from .sm_utils import default_formatter, extract_core_fields
 
@@ -48,75 +49,80 @@ for name, obj in OBJECT_CLASSES.items():
         obj["help"] += "\n\nExamples:\n- Name contains 'aco_test'\n- Desc contains 'test'"
 
 # Configure authentication
-# Priority: IDSP (OIDC) > IDSP (JWT) > Local (Static Token) > None
+# Priority: DISABLED > IDSP (OIDC) > IDSP (JWT) > Local (Static Token) > None
 auth = None
-idsp_oidc_url = os.getenv("IDSP_OIDC_URL")
-idsp_jwks_uri = os.getenv("IDSP_JWKS_URI")
-auth_token = os.getenv("MCP_AUTH_TOKEN")
 
-if idsp_oidc_url:
-    # Use OIDCProxy for full OAuth/OIDC support
-    # This enables the MCP server to act as an OAuth Client to Broadcom IDSP
-    config_url = f"{idsp_oidc_url}/.well-known/openid-configuration"
-    # If the URL already ends with .well-known..., use it as is
-    if idsp_oidc_url.endswith("openid-configuration"):
-        config_url = idsp_oidc_url
+if MCP_AUTH_DISABLED:
+    logging.getLogger(__name__).info("MCP Authentication is DISABLED via MCP_AUTH_DISABLED flag")
+else:
+    idsp_oidc_url = os.getenv("IDSP_OIDC_URL")
+    idsp_jwks_uri = os.getenv("IDSP_JWKS_URI")
+    auth_token = os.getenv("MCP_AUTH_TOKEN")
+
+    if idsp_oidc_url:
+        # Use OIDCProxy for full OAuth/OIDC support
+        # This enables the MCP server to act as an OAuth Client to Broadcom IDSP
+        config_url = f"{idsp_oidc_url}/.well-known/openid-configuration"
+        # If the URL already ends with .well-known..., use it as is
+        if idsp_oidc_url.endswith("openid-configuration"):
+            config_url = idsp_oidc_url
+            
+        logging.debug(f"Initializing OIDCProxy with Config URL: {config_url}")
+        logging.debug(f"Client ID: {os.getenv('IDSP_CLIENT_ID')}")
+        logging.debug(f"Base URL: {os.getenv('MCP_BASE_URL')}")
         
-    logging.debug(f"Initializing OIDCProxy with Config URL: {config_url}")
-    logging.debug(f"Client ID: {os.getenv('IDSP_CLIENT_ID')}")
-    logging.debug(f"Base URL: {os.getenv('MCP_BASE_URL')}")
-    
-    # Scopes to request from IDSP (Authorization)
-    requested_scopes = os.getenv("IDSP_SCOPES", "openid").split()
-    
-    # Scopes to require for Token Validation (Access)
-    # We remove 'offline_access' because it's a mechanism for getting refresh tokens,
-    # not necessarily a permission claim present in the Access Token itself.
-    validation_scopes = [s for s in requested_scopes if s != "offline_access"]
-    
-    callback_path = "/callback"
-    
-    # Public Client Configuration (PKCE)
-    # 1. token_endpoint_auth_method='none' indicates a public client
-    # 2. client_secret is required by the constructor but ignored by IDSP for public clients
-    # 3. We provide an explicit jwt_signing_key because the default is derived from the secret
-    
-    auth = OIDCProxy(
-        config_url=config_url,
-        client_id=os.getenv("IDSP_CLIENT_ID"),
-        client_secret="public-pkce-client", # Hardcoded because FastMCP requires a non-empty string
-        base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
-        required_scopes=validation_scopes,
-        extra_authorize_params={"scope": " ".join(requested_scopes)}, # Explicitly ask for full scopes
-        audience=os.getenv("IDSP_AUDIENCE"),
-        redirect_path=callback_path,
-        client_storage=DiskStore(directory="oauth_storage"),
-        token_endpoint_auth_method="none",
-        jwt_signing_key=os.getenv("JWT_SIGNING_KEY", "change-me-in-production"),
-        require_authorization_consent=False # For dev/automated flow
-    )
-    full_callback = f"{os.getenv('MCP_BASE_URL', 'http://localhost:3123')}{callback_path}"
-    logging.getLogger(__name__).info(f"Configured IDSP OIDC Public Client (PKCE). Callback URL: {full_callback}")
-    logging.debug(f"Requested Scopes: {requested_scopes}")
-    logging.debug(f"Validation Scopes: {validation_scopes}")
+        # Scopes to request from IDSP (Authorization)
+        requested_scopes = os.getenv("IDSP_SCOPES", "openid").split()
+        
+        # Scopes to require for Token Validation (Access)
+        # We remove 'offline_access' because it's a mechanism for getting refresh tokens,
+        # not necessarily a permission claim present in the Access Token itself.
+        validation_scopes = [s for s in requested_scopes if s != "offline_access"]
+        
+        callback_path = "/callback"
+        
+        # Public Client Configuration (PKCE)
+        # 1. token_endpoint_auth_method='none' indicates a public client
+        # 2. client_secret is required by the constructor but ignored by IDSP for public clients
+        # 3. We provide an explicit jwt_signing_key because the default is derived from the secret
+        
+        auth = OIDCProxy(
+            config_url=config_url,
+            client_id=os.getenv("IDSP_CLIENT_ID"),
+            client_secret="public-pkce-client", # Hardcoded because FastMCP requires a non-empty string
+            base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
+            required_scopes=validation_scopes,
+            extra_authorize_params={"scope": " ".join(requested_scopes)}, # Explicitly ask for full scopes
+            audience=os.getenv("IDSP_AUDIENCE"),
+            redirect_path=callback_path,
+            client_storage=DiskStore(directory="oauth_storage"),
+            token_endpoint_auth_method="none",
+            jwt_signing_key=os.getenv("JWT_SIGNING_KEY", "change-me-in-production"),
+            require_authorization_consent=False # For dev/automated flow
+        )
+        full_callback = f"{os.getenv('MCP_BASE_URL', 'http://localhost:3123')}{callback_path}"
+        logging.getLogger(__name__).info(f"Configured IDSP OIDC Public Client (PKCE). Callback URL: {full_callback}")
+        logging.debug(f"Requested Scopes: {requested_scopes}")
+        logging.debug(f"Validation Scopes: {validation_scopes}")
 
-elif idsp_jwks_uri:
-    auth = JWTVerifier(
-        jwks_uri=idsp_jwks_uri,
-        issuer=os.getenv("IDSP_ISSUER"),
-        audience=os.getenv("IDSP_AUDIENCE")
-    )
-    logging.getLogger(__name__).info("Configured IDSP JWT Authentication")
-elif auth_token:
-    auth = StaticTokenVerifier(
-        tokens={
-            auth_token: {
-                "client_id": "cursor-client",
-                "scopes": ["all"]
+    elif idsp_jwks_uri:
+        auth = JWTVerifier(
+            jwks_uri=idsp_jwks_uri,
+            issuer=os.getenv("IDSP_ISSUER"),
+            audience=os.getenv("IDSP_AUDIENCE")
+        )
+        logging.getLogger(__name__).info("Configured IDSP JWT Authentication")
+    elif auth_token:
+        auth = StaticTokenVerifier(
+            tokens={
+                auth_token: {
+                    "client_id": "cursor-client",
+                    "scopes": ["all"]
+                }
             }
-        }
-    )
-    logging.getLogger(__name__).info("Configured Static Token Authentication")
+        )
+        logging.getLogger(__name__).info("Configured Static Token Authentication")
+
 
 mcp = FastMCP(
     "siteminder-policy-assistant",
