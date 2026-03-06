@@ -32,11 +32,15 @@ ENV/
 
 # Environment variable files
 .env
+.env*
 **/.env
 
 # Uvicorn PID files
 *.pid
 **/*.pid
 
-# Gemini files
-**/gemini.md
+nginx-portable/
+
+oauth_storage/
+
+mcp.log

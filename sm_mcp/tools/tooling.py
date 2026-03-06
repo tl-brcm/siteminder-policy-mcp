@@ -5,7 +5,11 @@ import logging
 import urllib.parse
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context
+from fastmcp.server.auth import require_scopes
+from fastmcp.server.auth.providers.jwt import StaticTokenVerifier, JWTVerifier
+from fastmcp.server.auth.oidc_proxy import OIDCProxy
+from key_value.aio.stores.disk.store import DiskStore
 from sm_mcp.api.siteminder_api import (
     get_token,
     fetch_objects,
@@ -15,7 +19,9 @@ from sm_mcp.api.siteminder_api import (
     build_object_id_url,
     show_detail_cache,
     clear_detail_cache,
+    create_object,
 )
+from sm_mcp.core.config import MCP_AUTH_DISABLED
 import os
 from .sm_utils import default_formatter, extract_core_fields
 
@@ -42,7 +48,86 @@ for name, obj in OBJECT_CLASSES.items():
     if name == "SmAgentConfig":
         obj["help"] += "\n\nExamples:\n- Name contains 'aco_test'\n- Desc contains 'test'"
 
-mcp = FastMCP("siteminder-policy-assistant")
+# Configure authentication
+# Priority: DISABLED > IDSP (OIDC) > IDSP (JWT) > Local (Static Token) > None
+auth = None
+
+if MCP_AUTH_DISABLED:
+    logging.getLogger(__name__).info("MCP Authentication is DISABLED via MCP_AUTH_DISABLED flag")
+else:
+    idsp_oidc_url = os.getenv("IDSP_OIDC_URL")
+    idsp_jwks_uri = os.getenv("IDSP_JWKS_URI")
+    auth_token = os.getenv("MCP_AUTH_TOKEN")
+
+    if idsp_oidc_url:
+        # Use OIDCProxy for full OAuth/OIDC support
+        # This enables the MCP server to act as an OAuth Client to Broadcom IDSP
+        config_url = f"{idsp_oidc_url}/.well-known/openid-configuration"
+        # If the URL already ends with .well-known..., use it as is
+        if idsp_oidc_url.endswith("openid-configuration"):
+            config_url = idsp_oidc_url
+            
+        logging.debug(f"Initializing OIDCProxy with Config URL: {config_url}")
+        logging.debug(f"Client ID: {os.getenv('IDSP_CLIENT_ID')}")
+        logging.debug(f"Base URL: {os.getenv('MCP_BASE_URL')}")
+        
+        # Scopes to request from IDSP (Authorization)
+        requested_scopes = os.getenv("IDSP_SCOPES", "openid").split()
+        
+        # Scopes to require for Token Validation (Access)
+        # We remove 'offline_access' because it's a mechanism for getting refresh tokens,
+        # not necessarily a permission claim present in the Access Token itself.
+        validation_scopes = [s for s in requested_scopes if s != "offline_access"]
+        
+        callback_path = "/callback"
+        
+        # Public Client Configuration (PKCE)
+        # 1. token_endpoint_auth_method='none' indicates a public client
+        # 2. client_secret is required by the constructor but ignored by IDSP for public clients
+        # 3. We provide an explicit jwt_signing_key because the default is derived from the secret
+        
+        auth = OIDCProxy(
+            config_url=config_url,
+            client_id=os.getenv("IDSP_CLIENT_ID"),
+            client_secret="public-pkce-client", # Hardcoded because FastMCP requires a non-empty string
+            base_url=os.getenv("MCP_BASE_URL", "http://localhost:3123"),
+            required_scopes=validation_scopes,
+            extra_authorize_params={"scope": " ".join(requested_scopes)}, # Explicitly ask for full scopes
+            audience=os.getenv("IDSP_AUDIENCE"),
+            redirect_path=callback_path,
+            client_storage=DiskStore(directory="oauth_storage"),
+            token_endpoint_auth_method="none",
+            jwt_signing_key=os.getenv("JWT_SIGNING_KEY", "change-me-in-production"),
+            require_authorization_consent=False # For dev/automated flow
+        )
+        full_callback = f"{os.getenv('MCP_BASE_URL', 'http://localhost:3123')}{callback_path}"
+        logging.getLogger(__name__).info(f"Configured IDSP OIDC Public Client (PKCE). Callback URL: {full_callback}")
+        logging.debug(f"Requested Scopes: {requested_scopes}")
+        logging.debug(f"Validation Scopes: {validation_scopes}")
+
+    elif idsp_jwks_uri:
+        auth = JWTVerifier(
+            jwks_uri=idsp_jwks_uri,
+            issuer=os.getenv("IDSP_ISSUER"),
+            audience=os.getenv("IDSP_AUDIENCE")
+        )
+        logging.getLogger(__name__).info("Configured IDSP JWT Authentication")
+    elif auth_token:
+        auth = StaticTokenVerifier(
+            tokens={
+                auth_token: {
+                    "client_id": "cursor-client",
+                    "scopes": ["all"]
+                }
+            }
+        )
+        logging.getLogger(__name__).info("Configured Static Token Authentication")
+
+
+mcp = FastMCP(
+    "siteminder-policy-assistant",
+    auth=auth
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -123,8 +208,7 @@ def register_object_tools(obj_type: str) -> None:
 
     list_doc = f"Show a summary of all SiteMinder {obj_type} objects."
 
-    @mcp.tool(name=f"list_{obj_type.lower()}_summary", description=list_doc)
-    async def list_tool():
+    async def list_tool() -> str:
         token = await ensure_token()
         if not token:
             return " Failed to get session token."
@@ -132,31 +216,56 @@ def register_object_tools(obj_type: str) -> None:
             results = await fetch_objects(obj_type, token)
             if not results:
                 return f"No {obj_type} objects found."
-            normalized = [normalize_name(dict(r)) for r in results]
-            return "\n\n".join(formatter(o) for o in normalized)
+            
+            # SiteMinder 12.9 may return strings instead of dicts. 
+            # We normalize them into dicts before formatting.
+            processed = [
+                normalize_name(r if isinstance(r, dict) else {"name": str(r), "path": str(r)})
+                for r in results
+            ]
+            return "\n\n".join(formatter(o) for o in processed)
         except Exception as e:
             logger.exception("List operation failed")
             return f" Error fetching {obj_type} objects: {e}"
 
-    @mcp.tool(name=f"search_{obj_type.lower()}", description=help_text)
-    async def search_tool(filter_expression: str):
+    mcp.tool(
+        name=f"list_{obj_type.lower()}_summary",
+        description=list_doc
+    )(list_tool)
+
+    async def search_tool(filter_expression: str, ctx: Context) -> str:
         token = await ensure_token()
         if not token:
             return " Failed to get session token."
         try:
+            await ctx.info(f"Searching {obj_type} with filter: {filter_expression}")
             raw_results = await search_objects(obj_type, token, filter_expression) or []
             if not raw_results:
                 return f"No {obj_type} objects matched this filter."
-            results = [normalize_name(dict(r)) for r in raw_results]
+            
+            await ctx.info(f"Found {len(raw_results)} results. Fetching details...")
+            
+            processed = [
+                normalize_name(r if isinstance(r, dict) else {"name": str(r), "path": str(r)})
+                for r in raw_results
+            ]
 
-            output = [formatter(r) for r in results]
-            hrefs = [r.get("href") for r in results if r.get("href")]
+            output = [formatter(r) for r in processed]
+            hrefs = [r.get("href") for r in processed if r.get("href")]
+            
+            # Progress reporting could be granular here, but for now just logging
             await fetch_and_cache_details(hrefs, token, output)
+            
             logger.debug(f"output returned: {output}")
             return "\n\n".join(output)
         except Exception as e:
             logger.exception("Search operation failed")
             return f" Error fetching {obj_type} objects: {e}"
+
+    mcp.tool(
+        name=f"search_{obj_type.lower()}",
+        description=help_text
+    )(search_tool)
 
 @mcp.tool(name="get_object_by_id", description="Fetch a SiteMinder object by its ID and return full detail.")
 async def get_object_by_id_tool(id: str) -> str:
@@ -175,6 +284,46 @@ async def get_object_by_id_tool(id: str) -> str:
         logger.exception("Error retrieving object by ID")
         return f" Error retrieving object with ID {id}: {e}"
 
+@mcp.tool(
+    name="create_sm_agent", 
+    description="Create a new SiteMinder Web Agent.",
+    auth=require_scopes("siteminder:write")
+)
+async def create_sm_agent_tool(
+    name: str,
+    agent_type_href: str,
+    description: str = "",
+    realm_hint_attr_id: int = 0
+) -> str:
+    """Create a new SmAgent object.
+    
+    Args:
+        name: Unique name for the agent.
+        agent_type_href: The full href link to the AgentType (e.g., .../SmAgentTypes/Web+Agent).
+        description: Optional description of the agent.
+        realm_hint_attr_id: RADIUS attribute ID (default 0 for standard web agents).
+    """
+    token = await ensure_token()
+    if not token:
+        return " Failed to get session token."
+    
+    payload = {
+        "Name": name,
+        "Desc": description,
+        "AgentTypeLink": {"href": agent_type_href},
+        "RealmHintAttrId": realm_hint_attr_id
+    }
+    
+    try:
+        result = await create_object("SmAgents", payload, token)
+        if result and "data" in result:
+            return f" Successfully created Web Agent: {name}\n\n" + format_json_detail(result["data"])
+        else:
+            return f" Failed to create Web Agent. API Response: {json.dumps(result)}"
+    except Exception as e:
+        logger.exception("Create agent operation failed")
+        return f" Error creating Web Agent: {e}"
+
 # Register tools for all object types
 for obj_type in OBJECT_CLASSES:
     register_object_tools(obj_type)
@@ -189,15 +338,7 @@ def register_object_link_tool(
     Register a tool that retrieves a specific link endpoint for an object.
     The tool accepts object ID or ObjectIDURL as input.
     """
-    @mcp.tool(
-        name=name,
-        description=(
-            f"{description}\n\n"
-            "Input: the object ID (e.g., 'CA.SM::Domain@03-...') **or** the full object detail URL.\n"
-            "Output: JSON response from the requested endpoint.\n"
-            "This tool will construct the proper URL automatically."
-        )
-    )
+    
     async def tool(id_or_url: str):
         token = await ensure_token()
         if not token:
@@ -233,6 +374,16 @@ def register_object_link_tool(
         except Exception as e:
             return {"error": f"Failed to fetch detail for url: {url}, error: {e}"}
 
+    mcp.tool(
+        name=name,
+        description=(
+            f"{description}\n\n"
+            "Input: the object ID (e.g., 'CA.SM::Domain@03-...') **or** the full object detail URL.\n"
+            "Output: JSON response from the requested endpoint.\n"
+            "This tool will construct the proper URL automatically."
+        )
+    )(tool)
+
 # Call this at startup to register all link tools
 register_object_link_tool(
     mcp,
@@ -265,6 +416,37 @@ register_object_link_tool(
     description="Fetches the edit information for the given SiteMinder object ID."
 )
 
+@mcp.tool(name="get_parent_of_object", description="Fetches the full detail of the parent object for the given SiteMinder object ID.")
+async def get_parent_of_object_tool(id: str) -> str:
+    """Retrieves the parent object by first fetching the child and then following the 'parent' link."""
+    token = await ensure_token()
+    if not token:
+        return " Failed to get session token."
+    
+    try:
+        # 1. Fetch the child object to find the parent link
+        child_detail = await get_object_by_id(id, token)
+        if not child_detail:
+            return f" Could not find object with ID: {id}"
+        
+        # The parent info is at the root of the response, not in 'data'
+        parent_info = child_detail.get("parent")
+        if not parent_info or not parent_info.get("id"):
+            return f" Object {id} has no parent (it may be a top-level object)."
+        
+        parent_id = parent_info["id"]
+        
+        # 2. Fetch the actual parent detail
+        parent_detail = await get_object_by_id(parent_id, token)
+        if parent_detail:
+            return f"Parent Object Detail ({parent_id}):\n" + format_json_detail(parent_detail)
+        else:
+            return f" Found parent ID {parent_id} but failed to fetch its details."
+            
+    except Exception as e:
+        logger.exception("Error retrieving parent object")
+        return f" Error retrieving parent for {id}: {e}"
+
 @mcp.tool(name="show_detail_cache", description="Show the keys of the SiteMinder object detail cache.")
 async def show_detail_cache_tool() -> str:
     """Return the current keys stored in the detail cache."""
@@ -277,3 +459,105 @@ async def clear_detail_cache_tool() -> str:
 
     clear_detail_cache()
     return "DETAIL_CACHE cleared."
+
+@mcp.resource("siteminder://objects/{obj_id}")
+async def get_object_resource(obj_id: str) -> str:
+    """Read a SiteMinder object's raw JSON by its ID.
+    
+    The obj_id should be the SiteMinder object identifier (e.g., CA.SM::Domain@...).
+    """
+    token = await ensure_token()
+    if not token:
+        raise RuntimeError("Failed to get session token")
+    
+    detail = await get_object_by_id(obj_id, token)
+    return json.dumps(detail, indent=2)
+
+@mcp.resource("siteminder://skills/sm-policy-management/SKILL.md")
+async def get_skill_main_resource() -> str:
+    """Read the main SKILL.md file for the SiteMinder Agent Skill."""
+    with open("SKILL.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.resource("siteminder://skills/sm-policy-management/REFERENCE.md")
+async def get_skill_reference_resource() -> str:
+    """Read the REFERENCE.md file for the SiteMinder Agent Skill."""
+    with open("REFERENCE.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.resource("siteminder://skills/sm-policy-management/ACO_REFERENCE.md")
+async def get_skill_aco_reference_resource() -> str:
+    """Read the ACO_REFERENCE.md file for the SiteMinder Agent Skill."""
+    with open("ACO_REFERENCE.md", "r", encoding="utf-8") as f:
+        return f.read()
+
+@mcp.tool(name="get_skill_info", description="Returns the latest version and metadata for the SiteMinder Agent Skill.")
+async def get_skill_info_tool() -> dict:
+    """Provides version and hash info for the skill files."""
+    import hashlib
+    try:
+        with open("SKILL.md", "r", encoding="utf-8") as f:
+            content = f.read()
+            # Simple version extraction from YAML
+            version = "unknown"
+            for line in content.split("\n"):
+                if line.startswith("version:"):
+                    version = line.split(":")[1].strip()
+                    break
+            file_hash = hashlib.md5(content.encode()).hexdigest()
+            
+        return {
+            "name": "siteminder-policy-management",
+            "version": version,
+            "hash": file_hash,
+            "last_updated": "2026-02-25"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool(name="get_skill_sync_package", description="Returns the latest Agent Skill files and instructions on where the client should save them locally.")
+async def get_skill_sync_package_tool() -> dict:
+    """Provides the SKILL.md, REFERENCE.md, and ACO_REFERENCE.md content for local installation."""
+    try:
+        with open("SKILL.md", "r", encoding="utf-8") as f:
+            skill_md = f.read()
+        with open("REFERENCE.md", "r", encoding="utf-8") as f:
+            ref_md = f.read()
+        with open("ACO_REFERENCE.md", "r", encoding="utf-8") as f:
+            aco_md = f.read()
+        
+        return {
+            "status": "success",
+            "instructions": "Please save these files into your local agent skills directory (e.g., .cursor/skills/siteminder-policy/ or similar).",
+            "files": {
+                "SKILL.md": skill_md,
+                "REFERENCE.md": ref_md,
+                "ACO_REFERENCE.md": aco_md
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@mcp.tool(name="lookup_aco_parameter", description="Search the full dictionary of SiteMinder ACO parameters for specific names or keywords.")
+async def lookup_aco_parameter_tool(query: str) -> str:
+    """Searches the local aco_parameters.json database for the given query."""
+    import json
+    import os
+    
+    json_path = os.path.join(os.path.dirname(__file__), 'aco_parameters.json')
+    try:
+        with open(json_path, 'r') as f:
+            params = json.load(f)
+            
+        matches = [p for p in params if query.lower() in p['name'].lower() or query.lower() in p['description'].lower()]
+        
+        if not matches:
+            return f"No parameters found matching '{query}'."
+            
+        output = []
+        for p in matches:
+            output.append(f"### {p['name']}\n- **Default:** {p['default']}\n- **Description:** {p['description']}")
+            
+        return "\n\n".join(output)
+    except Exception as e:
+        return f"Error reading parameter database: {e}"
